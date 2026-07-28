@@ -1,0 +1,9 @@
+- [ ] Create `WhoWeightReferenceData.php` containing standard WHO/Kemenkes BB/U values
+- [ ] Modify `2024_01_01_000013_create_pemeriksaans_table.php` to add `status_berat_badan` and `zscore_bb_u` columns
+- [ ] Modify `Pemeriksaan.php` model to add fillable fields, casts, and color accessor for status BB/U
+- [ ] Modify `PemeriksaanRequest.php` to implement dynamic age-based weight/height validation
+- [ ] Modify `DecisionTreeService.php` to calculate BB/U Z-score and determine status
+- [ ] Update `PemeriksaanController.php` to save/update weight-related status and Z-scores
+- [ ] Re-run migrations and seeders to update the database schema
+- [ ] Update the UI views (list index, detail, dashboard, PDF reports) to display Weight status
+- [ ] Verify functionality manually
