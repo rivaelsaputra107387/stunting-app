@@ -17,7 +17,10 @@ class PemeriksaanController extends Controller
     {
         $query = Pemeriksaan::with('balita')->latest('tanggal_pemeriksaan');
 
-        // Filter by month/year
+        // Filter by month/year/status
+        if ($status = request('status_stunting')) {
+            $query->where('status_stunting', $status);
+        }
         if ($bulan = request('bulan')) {
             $query->whereMonth('tanggal_pemeriksaan', $bulan);
         }

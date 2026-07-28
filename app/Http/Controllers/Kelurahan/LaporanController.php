@@ -133,6 +133,9 @@ class LaporanController extends Controller
         if ($posyanduId = request('posyandu_id')) {
             $query->where('posyandu_id', $posyanduId);
         }
+        if ($status = request('status_stunting')) {
+            $query->where('status_stunting', $status);
+        }
         if ($bulan = request('bulan')) {
             $query->whereMonth('tanggal_pemeriksaan', $bulan);
         }

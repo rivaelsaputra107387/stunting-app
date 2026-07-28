@@ -31,95 +31,60 @@ class ExcelImportSeeder extends Seeder
         $totalBalita = 0;
         $totalPemeriksaan = 0;
 
+        // Pre-cache Posyandu list by uppercase name
+        $posyanduCache = Posyandu::all()->keyBy(function ($item) {
+            return strtoupper(trim($item->nama));
+        });
+
         foreach ($spreadsheet->getAllSheets() as $sheet) {
-            $sheetTitle = trim($sheet->getTitle());
             $rows = $sheet->toArray(null, true, true, true);
 
-            if (empty($rows)) {
+            if (empty($rows) || count($rows) < 2) {
                 continue;
             }
 
-            // Tentukan Posyandu & RW dari Sheet
-            $posyanduNama = $sheetTitle;
-            $posyanduRw = 'RW 01';
-
-            if (preg_match('/RW\s*(\d+)/i', $sheetTitle, $matches)) {
-                $posyanduRw = 'RW ' . str_pad($matches[1], 2, '0', STR_PAD_LEFT);
-            }
-
-            // Temukan atau Buat Posyandu
-            $posyandu = Posyandu::firstOrCreate(
-                ['nama' => $posyanduNama],
-                ['rw' => $posyanduRw, 'alamat' => 'Kelurahan Sukahaji']
-            );
-
-            // Cari Baris Header (yang berisi NAMA, NIK, JK, dsb)
-            $headerRowIndex = null;
-            $colMap = [];
-
-            foreach ($rows as $rowIndex => $row) {
-                $rowValues = array_map('strtoupper', array_map('strval', array_values($row)));
-                $rowString = implode(' ', $rowValues);
-
-                if (str_contains($rowString, 'NAMA') || str_contains($rowString, 'BALITA') || str_contains($rowString, 'TB') || str_contains($rowString, 'BB')) {
-                    $headerRowIndex = $rowIndex;
-
-                    foreach ($row as $colLetter => $cellValue) {
-                        $cellUpper = strtoupper(trim((string)$cellValue));
-
-                        if (str_contains($cellUpper, 'NIK')) {
-                            $colMap['nik'] = $colLetter;
-                        } elseif (str_contains($cellUpper, 'NAMA') && !isset($colMap['nama'])) {
-                            $colMap['nama'] = $colLetter;
-                        } elseif (str_contains($cellUpper, 'JK') || str_contains($cellUpper, 'SEX') || str_contains($cellUpper, 'KELAMIN')) {
-                            $colMap['jk'] = $colLetter;
-                        } elseif (str_contains($cellUpper, 'LAHIR') || str_contains($cellUpper, 'TGL')) {
-                            $colMap['tgl_lahir'] = $colLetter;
-                        } elseif (str_contains($cellUpper, 'ORTU') || str_contains($cellUpper, 'IBU') || str_contains($cellUpper, 'AYAH')) {
-                            $colMap['nama_ortu'] = $colLetter;
-                        } elseif (str_contains($cellUpper, 'ALAMAT') || str_contains($cellUpper, 'RT')) {
-                            $colMap['alamat'] = $colLetter;
-                        } elseif (str_contains($cellUpper, 'UMUR') || str_contains($cellUpper, 'USIA')) {
-                            $colMap['umur'] = $colLetter;
-                        } elseif (str_contains($cellUpper, 'TB') || str_contains($cellUpper, 'PB') || str_contains($cellUpper, 'TINGGI')) {
-                            $colMap['tb'] = $colLetter;
-                        } elseif (str_contains($cellUpper, 'BB') || str_contains($cellUpper, 'BERAT')) {
-                            $colMap['bb'] = $colLetter;
-                        }
-                    }
+            // Cari Baris Header (di baris 1)
+            $headerRowIndex = 1;
+            foreach ($rows as $rIdx => $row) {
+                $rowStr = strtoupper(implode(' ', array_values($row)));
+                if (str_contains($rowStr, 'NAMA_ANAK') || str_contains($rowStr, 'POSY') || str_contains($rowStr, 'NIK')) {
+                    $headerRowIndex = $rIdx;
                     break;
                 }
             }
 
-            // Jika header tidak terdeteksi via keyword, gunakan default posisi kolom
-            if (!$headerRowIndex) {
-                $headerRowIndex = 1;
-            }
-
-            // Iterasi baris data setelah header
             $dummyNikCounter = 1;
+
             foreach ($rows as $rowIndex => $row) {
                 if ($rowIndex <= $headerRowIndex) {
                     continue;
                 }
 
-                // Ambil nilai per kolom
-                $namaBalita = trim((string)($row[$colMap['nama'] ?? 'B'] ?? $row['B'] ?? ''));
-                if (empty($namaBalita) || is_numeric($namaBalita) || strtoupper($namaBalita) === 'NAMA' || strtoupper($namaBalita) === 'JUMLAH') {
+                // Ambil Nama Anak (Kolom C)
+                $namaBalita = trim(str_replace("\xc2\xa0", '', (string)($row['C'] ?? '')));
+                if (empty($namaBalita) || is_numeric($namaBalita) || strtoupper($namaBalita) === 'NAMA_ANAK' || strtoupper($namaBalita) === 'JUMLAH') {
                     continue;
                 }
 
-                $nik = preg_replace('/[^0-9]/', '', (string)($row[$colMap['nik'] ?? 'A'] ?? ''));
+                // Match Posyandu dari Kolom I (POSY) dan Kolom K (RW)
+                $posyRaw = trim(str_replace("\xc2\xa0", '', (string)($row['I'] ?? '')));
+                $rwRaw = trim(str_replace("\xc2\xa0", '', (string)($row['K'] ?? '')));
+                $posyandu = $this->matchPosyandu($posyRaw, $rwRaw, $posyanduCache);
+
+                // NIK (Kolom B)
+                $nikRaw = trim(str_replace("\xc2\xa0", '', (string)($row['B'] ?? '')));
+                $nik = preg_replace('/[^0-9]/', '', $nikRaw);
                 if (strlen($nik) !== 16) {
-                    $nik = '3273' . str_pad((string)($posyandu->id * 10000 + $dummyNikCounter), 12, '0', STR_PAD_LEFT);
+                    $nik = '3273' . str_pad((string)($posyandu->id * 100000 + $dummyNikCounter), 12, '0', STR_PAD_LEFT);
                     $dummyNikCounter++;
                 }
 
-                $jkRaw = strtoupper(trim((string)($row[$colMap['jk'] ?? 'C'] ?? 'L')));
-                $jenisKelamin = (str_contains($jkRaw, 'P') || str_contains($jkRaw, 'W')) ? 'P' : 'L';
+                // Jenis Kelamin (Kolom E)
+                $jkRaw = strtoupper(trim((string)($row['E'] ?? 'L')));
+                $jenisKelamin = (str_contains($jkRaw, 'P') || str_contains($jkRaw, 'PEREMPUAN') || str_contains($jkRaw, 'W')) ? 'P' : 'L';
 
-                // Parsing Tanggal Lahir
-                $tglLahirVal = $row[$colMap['tgl_lahir'] ?? 'D'] ?? null;
+                // Tanggal Lahir (Kolom D)
+                $tglLahirVal = trim(str_replace("\xc2\xa0", '', (string)($row['D'] ?? '')));
                 $tglLahir = Carbon::now()->subMonths(12)->format('Y-m-d');
 
                 if (is_numeric($tglLahirVal)) {
@@ -128,30 +93,61 @@ class ExcelImportSeeder extends Seeder
                     try {
                         $tglLahir = Carbon::parse($tglLahirVal)->format('Y-m-d');
                     } catch (\Exception $e) {
-                        // fallback
+                        // fallback jika parse gagal
                     }
                 }
 
-                $namaOrtu = trim((string)($row[$colMap['nama_ortu'] ?? 'E'] ?? 'Orang Tua Balita'));
+                // Nama Ortu (Kolom H)
+                $namaOrtu = trim(str_replace("\xc2\xa0", '', (string)($row['H'] ?? '')));
                 if (empty($namaOrtu)) {
                     $namaOrtu = 'Orang Tua ' . $namaBalita;
                 }
 
-                $alamat = trim((string)($row[$colMap['alamat'] ?? 'F'] ?? $posyanduNama));
+                // Alamat (Kolom L + RT J + RW K)
+                $jalanVal = trim(str_replace("\xc2\xa0", '', (string)($row['L'] ?? '')));
+                $rtVal = trim((string)($row['J'] ?? ''));
+                $rwVal = trim((string)($row['K'] ?? ''));
 
-                // Umur, TB, BB
-                $umurBulan = (int) preg_replace('/[^0-9]/', '', (string)($row[$colMap['umur'] ?? 'G'] ?? '12'));
-                if ($umurBulan < 0 || $umurBulan > 60) {
-                    $umurBulan = 12;
+                $alamatParts = [];
+                if (!empty($jalanVal)) $alamatParts[] = $jalanVal;
+                if (!empty($rtVal)) $alamatParts[] = "RT " . str_pad($rtVal, 2, '0', STR_PAD_LEFT);
+                if (!empty($rwVal)) $alamatParts[] = "RW " . str_pad($rwVal, 2, '0', STR_PAD_LEFT);
+
+                $alamat = !empty($alamatParts) ? implode(' ', $alamatParts) : 'Kelurahan Sukahaji';
+
+                // Tanggal Pemeriksaan (Kolom M: TANGGALUKUR)
+                $tglUkurVal = trim(str_replace("\xc2\xa0", '', (string)($row['M'] ?? '')));
+                $tanggalPemeriksaan = '2026-07-01';
+
+                if (is_numeric($tglUkurVal)) {
+                    $tanggalPemeriksaan = Carbon::instance(ExcelDate::excelToDateTimeObject($tglUkurVal))->format('Y-m-d');
+                } elseif (!empty($tglUkurVal)) {
+                    try {
+                        $tanggalPemeriksaan = Carbon::parse($tglUkurVal)->format('Y-m-d');
+                    } catch (\Exception $e) {
+                        // fallback
+                    }
                 }
 
-                $tbRaw = str_replace(',', '.', (string)($row[$colMap['tb'] ?? 'H'] ?? '75'));
-                $tinggiBadan = (float) preg_replace('/[^0-9.]/', '', $tbRaw);
-                if ($tinggiBadan <= 0) $tinggiBadan = 75.0;
+                // Umur Bulan (Kolom G: umur_bulan)
+                $umurBulanVal = trim((string)($row['G'] ?? ''));
+                $umurBulan = (int) preg_replace('/[^0-9]/', '', $umurBulanVal);
+                if ($umurBulan < 0 || $umurBulan > 60) {
+                    // Hitung dari tgl lahir & tgl pemeriksaan
+                    $tglLahirCarbon = Carbon::parse($tglLahir);
+                    $tglPemeriksaanCarbon = Carbon::parse($tanggalPemeriksaan);
+                    $umurBulan = max(0, min(60, (int)$tglLahirCarbon->diffInMonths($tglPemeriksaanCarbon)));
+                }
 
-                $bbRaw = str_replace(',', '.', (string)($row[$colMap['bb'] ?? 'I'] ?? '9.5'));
+                // Berat Badan (Kolom N: BERAT)
+                $bbRaw = str_replace(',', '.', trim((string)($row['N'] ?? '9.5')));
                 $beratBadan = (float) preg_replace('/[^0-9.]/', '', $bbRaw);
                 if ($beratBadan <= 0) $beratBadan = 9.5;
+
+                // Tinggi Badan (Kolom O: TINGGI)
+                $tbRaw = str_replace(',', '.', trim((string)($row['O'] ?? '75')));
+                $tinggiBadan = (float) preg_replace('/[^0-9.]/', '', $tbRaw);
+                if ($tinggiBadan <= 0) $tinggiBadan = 75.0;
 
                 // Simpan atau Update Balita
                 $balita = Balita::updateOrCreate(
@@ -175,9 +171,6 @@ class ExcelImportSeeder extends Seeder
                     beratBadan: $beratBadan
                 );
 
-                // Tanggal Pemeriksaan Juli 2026
-                $tanggalPemeriksaan = '2026-07-15';
-
                 Pemeriksaan::updateOrCreate(
                     [
                         'balita_id'           => $balita->id,
@@ -192,7 +185,7 @@ class ExcelImportSeeder extends Seeder
                         'zscore_tb_u'        => $dtResult['zscore'],
                         'status_berat_badan' => $dtResult['status_berat'],
                         'zscore_bb_u'        => $dtResult['zscore_bb_u'],
-                        'catatan'            => 'Diimpor dari Excel Kelurahan Sukahaji (Juli 2026)',
+                        'catatan'            => 'Diimpor dari Excel Kelurahan Sukahaji',
                     ]
                 );
                 $totalPemeriksaan++;
@@ -201,4 +194,82 @@ class ExcelImportSeeder extends Seeder
 
         $this->command->info("Impor Berhasil! Total Balita: {$totalBalita}, Total Pemeriksaan: {$totalPemeriksaan}");
     }
+
+    /**
+     * Mencocokkan string POSY dari Excel ke Posyandu di DB
+     */
+    private function matchPosyandu(string $posyRaw, string $rwRaw, &$cache): Posyandu
+    {
+        $raw = strtoupper(trim($posyRaw));
+
+        if (str_contains($raw, 'MELATI 1')) {
+            $nama = 'Melati 1';
+        } elseif (str_contains($raw, 'MELATI 2')) {
+            $nama = 'Melati 2';
+        } elseif (str_contains($raw, 'MELATI 3')) {
+            $nama = 'Melati 3';
+        } elseif (str_contains($raw, 'DAHLIA 1')) {
+            $nama = 'Dahlia 1';
+        } elseif (str_contains($raw, 'DAHLIA 2')) {
+            $nama = 'Dahlia 2';
+        } elseif (str_contains($raw, 'DAHLIA 3')) {
+            $nama = 'Dahlia 3';
+        } elseif (str_contains($raw, 'CEMPAKA 1')) {
+            $nama = 'Cempaka 1';
+        } elseif (str_contains($raw, 'CEMPAKA 2')) {
+            $nama = 'Cempaka 2';
+        } elseif (str_contains($raw, 'CEMPAKA 3')) {
+            $nama = 'Cempaka 3';
+        } elseif (str_contains($raw, 'MAWAR MELATI 1')) {
+            $nama = 'Mawar Melati 1';
+        } elseif (str_contains($raw, 'MAWAR MELATI 2')) {
+            $nama = 'Mawar Melati 2';
+        } elseif (str_contains($raw, 'BAKTI IBU 1')) {
+            $nama = 'Bakti Ibu 1';
+        } elseif (str_contains($raw, 'BAKTI IBU 2')) {
+            $nama = 'Bakti Ibu 2';
+        } elseif (str_contains($raw, 'FLAMBOYAN 1')) {
+            $nama = 'Flamboyan 1';
+        } elseif (str_contains($raw, 'FLAMBOYAN 2')) {
+            $nama = 'Flamboyan 2';
+        } elseif (str_contains($raw, 'FLAMBOYAN 3')) {
+            $nama = 'Flamboyan 3';
+        } elseif (str_contains($raw, 'MELATI RW 07') || str_contains($raw, 'MELATI 07')) {
+            $nama = 'Melati RW 07';
+        } elseif (str_contains($raw, 'KENANGA 1')) {
+            $nama = 'Kenanga 1';
+        } elseif (str_contains($raw, 'KENANGA 2')) {
+            $nama = 'Kenanga 2';
+        } elseif (str_contains($raw, 'MELATI MEKAR')) {
+            $nama = 'Melati Mekar';
+        } elseif (str_contains($raw, 'MELATI') && (str_contains($raw, '10') || str_contains($raw, '*'))) {
+            $nama = 'Melati RW 10';
+        } else {
+            $nama = trim(preg_replace('/\s+RW\s*\d+.*/i', '', $posyRaw));
+        }
+
+        $upperNama = strtoupper($nama);
+
+        if (isset($cache[$upperNama])) {
+            return $cache[$upperNama];
+        }
+
+        // Search in DB if not in cache
+        $posyandu = Posyandu::where('nama', $nama)->first();
+
+        if (!$posyandu) {
+            $rwNum = preg_replace('/[^0-9]/', '', $rwRaw);
+            $rwFormatted = !empty($rwNum) ? 'RW ' . str_pad($rwNum, 2, '0', STR_PAD_LEFT) : 'RW 01';
+            $posyandu = Posyandu::create([
+                'nama'   => $nama,
+                'rw'     => $rwFormatted,
+                'alamat' => 'Kelurahan Sukahaji',
+            ]);
+        }
+
+        $cache[$upperNama] = $posyandu;
+
+        return $posyandu;
+    }
 }
+

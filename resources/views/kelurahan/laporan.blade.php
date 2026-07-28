@@ -21,6 +21,16 @@
             </select>
         </div>
 
+        <div>
+            <label class="form-label">Status Stunting</label>
+            <select id="status_stunting" class="form-input">
+                <option value="">Semua Status</option>
+                <option value="Normal">Normal</option>
+                <option value="Risk of Stunting">Risk of Stunting</option>
+                <option value="Stunting">Stunting</option>
+            </select>
+        </div>
+
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div>
                 <label class="form-label">Bulan</label>
@@ -69,11 +79,13 @@
 <script>
 function downloadReport(format) {
     const posyandu_id = document.getElementById('posyandu_id').value;
+    const status_stunting = document.getElementById('status_stunting').value;
     const bulan = document.getElementById('bulan').value;
     const tahun = document.getElementById('tahun').value;
 
     const params = new URLSearchParams();
     if (posyandu_id) params.append('posyandu_id', posyandu_id);
+    if (status_stunting) params.append('status_stunting', status_stunting);
     if (bulan) params.append('bulan', bulan);
     if (tahun) params.append('tahun', tahun);
 

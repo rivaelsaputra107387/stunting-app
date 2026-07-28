@@ -17,6 +17,12 @@
 <div style="background: #fff; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; border: 1px solid #f1f5f9;">
     <form method="GET" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
         <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari nama balita..." class="form-input" style="max-width: 200px;">
+        <select name="status_stunting" class="form-input" style="max-width: 160px;">
+            <option value="">Semua Status</option>
+            <option value="Normal" {{ request('status_stunting') == 'Normal' ? 'selected' : '' }}>Normal</option>
+            <option value="Risk of Stunting" {{ request('status_stunting') == 'Risk of Stunting' ? 'selected' : '' }}>Risk of Stunting</option>
+            <option value="Stunting" {{ request('status_stunting') == 'Stunting' ? 'selected' : '' }}>Stunting</option>
+        </select>
         <select name="bulan" class="form-input" style="max-width: 140px;">
             <option value="">Semua Bulan</option>
             @for($m = 1; $m <= 12; $m++)
@@ -32,7 +38,7 @@
             @endfor
         </select>
         <button type="submit" class="btn btn-secondary">Filter</button>
-        @if(request()->hasAny(['search', 'bulan', 'tahun']))
+        @if(request()->hasAny(['search', 'status_stunting', 'bulan', 'tahun']))
             <a href="{{ route('posyandu.pemeriksaan.index') }}" class="btn btn-secondary">Reset</a>
         @endif
     </form>

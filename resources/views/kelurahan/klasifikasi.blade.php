@@ -20,6 +20,15 @@
             </select>
         </div>
         <div>
+            <label class="form-label">Status Stunting</label>
+            <select name="status_stunting" class="form-input" style="min-width: 160px;">
+                <option value="">Semua Status</option>
+                <option value="Normal" {{ request('status_stunting') == 'Normal' ? 'selected' : '' }}>Normal</option>
+                <option value="Risk of Stunting" {{ request('status_stunting') == 'Risk of Stunting' ? 'selected' : '' }}>Risk of Stunting</option>
+                <option value="Stunting" {{ request('status_stunting') == 'Stunting' ? 'selected' : '' }}>Stunting</option>
+            </select>
+        </div>
+        <div>
             <label class="form-label">Bulan</label>
             <select name="bulan" class="form-input" style="min-width: 130px;">
                 <option value="">Semua</option>
@@ -41,7 +50,7 @@
         </div>
         <button type="submit" class="btn btn-primary">Filter Data</button>
 
-        @if(request('posyandu_id') || request('bulan') || request('tahun'))
+        @if(request('posyandu_id') || request('status_stunting') || request('bulan') || request('tahun'))
             <a href="{{ route('kelurahan.klasifikasi.index') }}" class="btn btn-secondary">Reset</a>
         @endif
     </form>
