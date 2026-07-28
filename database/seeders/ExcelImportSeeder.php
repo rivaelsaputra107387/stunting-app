@@ -174,7 +174,7 @@ class ExcelImportSeeder extends Seeder
                 Pemeriksaan::updateOrCreate(
                     [
                         'balita_id'           => $balita->id,
-                        'tanggal_pemeriksaan' => $tanggalPemeriksaan,
+                        'tanggal_pemeriksaan' => Carbon::parse($tanggalPemeriksaan)->startOfDay(),
                     ],
                     [
                         'posyandu_id'        => $posyandu->id,
@@ -193,6 +193,26 @@ class ExcelImportSeeder extends Seeder
         }
 
         $this->command->info("Impor Berhasil! Total Balita: {$totalBalita}, Total Pemeriksaan: {$totalPemeriksaan}");
+
+        $this->command->info("Melatih model Machine Learning Decision Tree (C4.5)...");
+        $c45Service = new \App\Services\C45Service();
+        $c45Service->train();
+
+        $this->command->info("Menerapkan prediksi C4.5 ke semua data pemeriksaan...");
+        $semuaPemeriksaan = Pemeriksaan::with('balita')->get();
+        foreach ($semuaPemeriksaan as $p) {
+            if (!$p->balita) continue;
+            
+            $dtPrediction = $c45Service->predict(
+                $p->umur_bulan,
+                $p->balita->jenis_kelamin,
+                (float) $p->tinggi_badan,
+                (float) $p->berat_badan
+            );
+
+            $p->update(['status_dt' => $dtPrediction]);
+        }
+        $this->command->info("Prediksi C4.5 selesai diterapkan.");
     }
 
     /**

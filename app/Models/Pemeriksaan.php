@@ -26,6 +26,7 @@ class Pemeriksaan extends Model
         'tinggi_badan',
         'berat_badan',
         'status_stunting',
+        'status_dt',
         'zscore_tb_u',
         'status_berat_badan',
         'zscore_bb_u',

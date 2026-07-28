@@ -195,14 +195,13 @@
                         $balita = $p->balita;
                         $actualLabel = $p->status_stunting ?? 'Normal';
                         
-                        // Decision Tree prediction calculate dynamically
-                        $dtPrediction = $dtService->classify(
+                        // C4.5 Decision Tree prediction
+                        $predictedLabel = $p->status_dt ?? $c45Service->predict(
                             $p->umur_bulan,
                             $balita->jenis_kelamin ?? 'L',
                             (float)$p->tinggi_badan,
                             (float)$p->berat_badan
                         );
-                        $predictedLabel = $dtPrediction['status'];
                         $isMatch = ($actualLabel === $predictedLabel);
                     @endphp
                     <tr>

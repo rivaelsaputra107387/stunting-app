@@ -37,6 +37,7 @@ Route::prefix('kelurahan')
         // Klasifikasi
         Route::get('/klasifikasi', [Kelurahan\KlasifikasiController::class, 'index'])->name('klasifikasi.index');
         Route::post('/klasifikasi/proses', [Kelurahan\KlasifikasiController::class, 'proses'])->name('klasifikasi.proses');
+        Route::get('/klasifikasi/proses', fn() => redirect()->route('kelurahan.klasifikasi.index'));
 
         // Laporan
         Route::get('/laporan', [Kelurahan\LaporanController::class, 'index'])->name('laporan.index');

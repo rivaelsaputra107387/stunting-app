@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Pemeriksaan;
+use App\Services\C45Service;
 
 class ConfusionMatrixService
 {
@@ -10,15 +11,15 @@ class ConfusionMatrixService
      * Calculate Confusion Matrix and Evaluation Metrics for Stunting Classification.
      *
      * Ground Truth (Actual): status_stunting (calculated via Z-Score TB/U)
-     * Prediction (Predicted): Decision Tree classification result
+     * Prediction (Predicted): C4.5 Decision Tree classification result
      *
      * Classes: ['Normal', 'Risk of Stunting', 'Stunting']
      *
      * @param iterable $pemeriksaans
-     * @param DecisionTreeService $dtService
+     * @param C45Service $c45Service
      * @return array
      */
-    public function calculate(iterable $pemeriksaans, DecisionTreeService $dtService): array
+    public function calculate(iterable $pemeriksaans, C45Service $c45Service): array
     {
         $classes = ['Normal', 'Risk of Stunting', 'Stunting'];
 
@@ -43,14 +44,14 @@ class ConfusionMatrixService
                 $actual = 'Normal';
             }
 
-            // Calculate Decision Tree prediction
-            $dtHasil = $dtService->classify(
+            // If status_dt exists, use it, else predict
+            $predicted = $p->status_dt ?? $c45Service->predict(
                 $p->umur_bulan,
                 $balita->jenis_kelamin,
                 (float) $p->tinggi_badan,
                 (float) $p->berat_badan
             );
-            $predicted = $dtHasil['status'];
+            
             if (!in_array($predicted, $classes)) {
                 $predicted = 'Normal';
             }

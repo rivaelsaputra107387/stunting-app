@@ -7,13 +7,14 @@ use App\Models\Pemeriksaan;
 use App\Models\Posyandu;
 use App\Services\ConfusionMatrixService;
 use App\Services\DecisionTreeService;
+use App\Services\C45Service;
 
 class KlasifikasiController extends Controller
 {
     /**
      * Show classification page with filters, predictions, and confusion matrix.
      */
-    public function index(DecisionTreeService $dtService, ConfusionMatrixService $cmService)
+    public function index(DecisionTreeService $dtService, ConfusionMatrixService $cmService, C45Service $c45Service)
     {
         $posyandus = Posyandu::orderBy('nama')->get();
 
@@ -33,17 +34,17 @@ class KlasifikasiController extends Controller
         }
 
         $allPemeriksaans = (clone $query)->get();
-        $evaluation = $cmService->calculate($allPemeriksaans, $dtService);
+        $evaluation = $cmService->calculate($allPemeriksaans, $c45Service);
 
         $pemeriksaans = $query->latest('tanggal_pemeriksaan')->paginate(25)->withQueryString();
 
-        return view('kelurahan.klasifikasi', compact('posyandus', 'pemeriksaans', 'evaluation', 'dtService'));
+        return view('kelurahan.klasifikasi', compact('posyandus', 'pemeriksaans', 'evaluation', 'dtService', 'c45Service'));
     }
 
     /**
      * Batch re-classify all examinations using Decision Tree.
      */
-    public function proses(DecisionTreeService $dtService)
+    public function proses(DecisionTreeService $dtService, C45Service $c45Service)
     {
         $query = Pemeriksaan::with('balita');
 
@@ -60,6 +61,9 @@ class KlasifikasiController extends Controller
             $query->whereYear('tanggal_pemeriksaan', $tahun);
         }
 
+        // 1. Train the model with all available data (or data matching the filter)
+        $c45Service->train();
+
         $pemeriksaans = $query->get();
         $count = 0;
 
@@ -67,6 +71,7 @@ class KlasifikasiController extends Controller
             $balita = $pemeriksaan->balita;
             if (!$balita) continue;
 
+            // Z-Score calculation
             $hasil = $dtService->classify(
                 umurBulan: $pemeriksaan->umur_bulan,
                 jenisKelamin: $balita->jenis_kelamin,
@@ -74,8 +79,17 @@ class KlasifikasiController extends Controller
                 beratBadan: (float) $pemeriksaan->berat_badan,
             );
 
+            // C4.5 Prediction
+            $dtPrediction = $c45Service->predict(
+                $pemeriksaan->umur_bulan,
+                $balita->jenis_kelamin,
+                (float) $pemeriksaan->tinggi_badan,
+                (float) $pemeriksaan->berat_badan
+            );
+
             $pemeriksaan->update([
                 'status_stunting'    => $hasil['status'],
+                'status_dt'          => $dtPrediction,
                 'zscore_tb_u'        => $hasil['zscore'],
                 'status_berat_badan' => $hasil['status_berat'],
                 'zscore_bb_u'        => $hasil['zscore_bb_u'],
@@ -85,7 +99,7 @@ class KlasifikasiController extends Controller
         }
 
         return redirect()->route('kelurahan.klasifikasi.index', request()->query())
-            ->with('success', "Berhasil mengklasifikasi ulang {$count} data pemeriksaan.");
+            ->with('success', "Berhasil melatih model C4.5 dan memprediksi ulang {$count} data pemeriksaan.");
     }
 }
 
